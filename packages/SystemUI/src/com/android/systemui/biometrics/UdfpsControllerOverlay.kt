@@ -266,7 +266,9 @@ constructor(
                 if (Build.IS_DEBUGGABLE) {
                     Log.d(TAG, "adding view=$view")
                 }
+                // updateDimensions() may rotate sensorBounds in-place; sync sensorRect after.
                 windowManager.addView(view, coreLayoutParams.updateDimensions(animation))
+                overlayTouchView?.sensorRect = Rect(sensorBounds)
             }
         if (powerInteractor.detailedWakefulness.value.isAwake()) {
             // Device is awake, so we add the view immediately.
@@ -289,7 +291,6 @@ constructor(
     fun updateOverlayParams(updatedOverlayParams: UdfpsOverlayParams) {
         overlayParams = updatedOverlayParams
         sensorBounds = updatedOverlayParams.sensorBounds
-        overlayTouchView?.sensorRect = updatedOverlayParams.sensorBounds
         getTouchOverlay()?.let {
             if (addViewRunnable == null) {
                 // Only updateViewLayout if there's no pending view to add to WM.
@@ -299,6 +300,9 @@ constructor(
                 windowManager.updateViewLayout(it, coreLayoutParams.updateDimensions(null))
             }
         }
+        // Update sensorRect after updateDimensions() so it reflects any rotation applied
+        // to sensorBounds in-place by shouldRotate() logic.
+        overlayTouchView?.sensorRect = Rect(sensorBounds)
     }
 
     /** Hide the overlay or return false and do nothing if it is already hidden. */
@@ -409,6 +413,18 @@ constructor(
     private fun shouldRotate(): Boolean {
         if (!keyguardStateController.isShowing) {
             // always rotate view if we're not on the keyguard
+            return true
+        }
+
+        // On landscape-default devices the keyguard renders in a non-zero rotation. The original
+        // "don't rotate on keyguard" assumption was designed for portrait-only phones where the
+        // keyguard is always ROTATION_0. When the keyguard is in ROTATION_90 or ROTATION_270 and
+        // the device is not occluded and not going to sleep, rotate the overlay bounds so the spy
+        // window covers the physical screen area where the sensor lives.
+        val rot = overlayParams.rotation
+        if (!keyguardStateController.isOccluded &&
+                !keyguardUpdateMonitor.isGoingToSleep &&
+                (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270)) {
             return true
         }
 
