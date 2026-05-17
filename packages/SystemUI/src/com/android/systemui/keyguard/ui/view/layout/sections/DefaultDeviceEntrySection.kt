@@ -21,6 +21,7 @@ import android.content.Context
 import android.graphics.Point
 import android.graphics.Rect
 import android.util.DisplayMetrics
+import android.view.Surface
 import android.view.WindowManager
 import androidx.annotation.VisibleForTesting
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -131,18 +132,15 @@ constructor(
 
         if (isUdfpsSupported) {
             deviceEntryIconViewModel.get().udfpsLocation.value?.let { udfpsLocation ->
+                val center = rotatedSensorCenter(udfpsLocation.centerX, udfpsLocation.centerY)
                 blueprintLogger.d({
                     "udfpsLocation=$str1, scaledLocation=$str2, unusedAuthController=$str3"
                 }) {
                     str1 = "$udfpsLocation"
-                    str2 = "(${udfpsLocation.centerX}, ${udfpsLocation.centerY})"
+                    str2 = "(${center.x}, ${center.y})"
                     str3 = "${authController.udfpsLocation}"
                 }
-                centerIcon(
-                    Point(udfpsLocation.centerX.toInt(), udfpsLocation.centerY.toInt()),
-                    udfpsLocation.radius,
-                    constraintSet,
-                )
+                centerIcon(center, udfpsLocation.radius, constraintSet)
             }
         } else {
             centerIcon(
@@ -159,6 +157,19 @@ constructor(
     override fun removeViews(constraintLayout: ConstraintLayout) {
         constraintLayout.removeView(deviceEntryIconViewId)
         disposableHandle?.dispose()
+    }
+
+    private fun rotatedSensorCenter(naturalX: Float, naturalY: Float): Point {
+        val bounds = windowManager.currentWindowMetrics.bounds
+        val displayWidth = bounds.right.toFloat()
+        val displayHeight = bounds.bottom.toFloat()
+        return when (context.display?.rotation ?: Surface.ROTATION_0) {
+            Surface.ROTATION_90 -> Point(naturalY.toInt(), (displayHeight - naturalX).toInt())
+            Surface.ROTATION_270 -> Point((displayWidth - naturalY).toInt(), naturalX.toInt())
+            Surface.ROTATION_180 ->
+                Point((displayWidth - naturalX).toInt(), (displayHeight - naturalY).toInt())
+            else -> Point(naturalX.toInt(), naturalY.toInt())
+        }
     }
 
     @VisibleForTesting
